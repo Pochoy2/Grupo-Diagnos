@@ -352,6 +352,28 @@
     <h2 style="margin:0;font-size:16px;color:var(--text);font-family:'DM Mono',monospace;font-weight:700;">Comparación de Meses</h2>
   </div>
 
+  <!-- ══ BLOQUE 0: TOTALES ══ -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;">
+    <div style="font-size:11px;font-family:'DM Mono',monospace;font-weight:700;color:var(--accent);letter-spacing:.08em;margin-bottom:14px;">TOTAL DE ESTUDIOS POR MES</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <span style="color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;font-weight:700;min-width:80px">MESES:</span>
+      <div id="tot-mes-chips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+      <button onclick="addTotMes()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;font-weight:600;">+ Mes</button>
+    </div>
+    <div id="tot-mes-add-wrap" style="display:none;margin-bottom:12px;">
+      <select id="tot-mes-add" onchange="onTotMesSelect(this)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:5px 10px;border-radius:6px;outline:none;width:160px">
+        <option value="">— elegir —</option>
+      </select>
+    </div>
+    <!-- Tarjetas de totales -->
+    <div id="tot-cards" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <!-- Gráfico de barras -->
+    <div class="card" style="margin:0;">
+      <div class="card-title">Evolución total de estudios</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="compTotChart"></canvas></div>
+    </div>
+  </div>
+
   <!-- ══ BLOQUE 1: OBRAS SOCIALES ══ -->
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;">
     <div style="font-size:11px;font-family:'DM Mono',monospace;font-weight:700;color:var(--accent);letter-spacing:.08em;margin-bottom:14px;">COMPARACIÓN POR OBRA SOCIAL</div>
@@ -985,6 +1007,99 @@ function mkCompChart(id, labels, datasets, extraOpts={}) {
 // ════════════════════════════════════
 // BLOQUE 1: OBRAS SOCIALES
 // ════════════════════════════════════
+// ════════════════════════════════════
+// BLOQUE 0: TOTAL DE ESTUDIOS
+// ════════════════════════════════════
+let totChartMeses = [];
+
+function initTotBlock() {
+  const last = ALL_YMS[ALL_YMS.length-1];
+  totChartMeses = [last];
+  const [ay,am] = last.split('-').map(Number);
+  const prev = ymKey(ay-1, am);
+  if (ALL_YMS.includes(prev)) totChartMeses.push(prev);
+  else if (ALL_YMS.length > 1) totChartMeses.push(ALL_YMS[ALL_YMS.length-2]);
+  renderChips(totChartMeses, 'tot-mes-chips', 'removeTotMes');
+  buildTotChart();
+}
+
+function addTotMes() {
+  const wrap = document.getElementById('tot-mes-add-wrap');
+  wrap.style.display = wrap.style.display==='none' ? 'block' : 'none';
+  if (wrap.style.display==='block') fillMesSelect('tot-mes-add', totChartMeses);
+}
+function onTotMesSelect(sel) {
+  const v = sel.value; if (!v) return;
+  if (!totChartMeses.includes(v)) { totChartMeses.push(v); renderChips(totChartMeses,'tot-mes-chips','removeTotMes'); buildTotChart(); }
+  document.getElementById('tot-mes-add-wrap').style.display='none';
+}
+function removeTotMes(key) {
+  totChartMeses = totChartMeses.filter(m=>m!==key);
+  renderChips(totChartMeses,'tot-mes-chips','removeTotMes');
+  buildTotChart();
+}
+
+function buildTotChart() {
+  if (totChartMeses.length===0) return;
+
+  // Tarjetas de totales
+  const cards = document.getElementById('tot-cards');
+  cards.innerHTML = '';
+  totChartMeses.forEach((m, i) => {
+    const [ay,am] = m.split('-').map(Number);
+    const total = getMesTotal(m);
+    const derqui = EST_CONS.find(r=>r.año===ay&&r.mes===am&&r.consultorio==='DERQUI')?.cantidad||0;
+    const roca   = EST_CONS.find(r=>r.año===ay&&r.mes===am&&r.consultorio==='ROCA')?.cantidad||0;
+    const c = COMP_COLORS[i % COMP_COLORS.length];
+
+    // Variación vs mes anterior en el array
+    let varHtml = '';
+    if (i > 0) {
+      const prevTotal = getMesTotal(totChartMeses[i-1]);
+      if (prevTotal > 0) {
+        const pct = ((total - prevTotal) / prevTotal * 100).toFixed(1);
+        const up = total >= prevTotal;
+        varHtml = `<div style="font-size:11px;font-family:'DM Mono',monospace;color:${up?'#16a34a':'#dc2626'};font-weight:700;margin-top:4px">${up?'▲':'▼'} ${Math.abs(pct)}% vs ${ymLabel(...totChartMeses[i-1].split('-').map(Number))}</div>`;
+      }
+    }
+
+    cards.innerHTML += `
+      <div style="flex:1;min-width:180px;background:${c}11;border:2px solid ${c};border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;font-family:'DM Mono',monospace;font-weight:700;color:${c};margin-bottom:6px;">${ymLabel(ay,am).toUpperCase()}</div>
+        <div style="font-size:26px;font-family:'DM Mono',monospace;font-weight:700;color:var(--text);">${fmt(total)}</div>
+        <div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:6px;">DERQUI: ${fmt(derqui)} · ROCA: ${fmt(roca)}</div>
+        ${varHtml}
+      </div>`;
+  });
+
+  // Gráfico de barras
+  const labels = totChartMeses.map(m=>{ const [ay,am]=m.split('-').map(Number); return ymLabel(ay,am); });
+  const totals = totChartMeses.map(m=>getMesTotal(m));
+  mkCompChart('compTotChart', labels, [{
+    label: 'Total estudios',
+    data: totals,
+    _monthTotal: null, // no aplica % para este gráfico (la barra ES el total)
+    backgroundColor: totChartMeses.map((_,i)=>COMP_COLORS[i%COMP_COLORS.length]+'99'),
+    borderColor: totChartMeses.map((_,i)=>COMP_COLORS[i%COMP_COLORS.length]),
+    borderWidth: 2, borderRadius: 6
+  }], {
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: {
+        label: function(ctx) {
+          const val = ctx.raw || 0;
+          // Comparar con la primera barra
+          const first = totals[0];
+          const pct = first > 0 ? ((val-first)/first*100).toFixed(1) : '0.0';
+          const sign = val >= first ? '+' : '';
+          const extra = ctx.dataIndex > 0 ? `  (${sign}${pct}% vs ${labels[0]})` : '';
+          return ` ${fmt(val)} estudios${extra}`;
+        }
+      }}
+    }
+  });
+}
+
 function initOsBlock() {
   // Poblar select de OS
   const allOS = [...new Set(OS_REAL.map(r => r.os))].sort();
@@ -1121,6 +1236,7 @@ function buildTipoChart() {
 
 // ── Inicialización al abrir la tab ──
 function initComparacion() {
+  initTotBlock();
   initOsBlock();
   initTipoBlock();
 }
